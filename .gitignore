@@ -1,0 +1,6 @@
+.venv/
+.env
+local_db/
+__pycache__/
+*.pdf
+reports/

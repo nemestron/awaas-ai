@@ -2,29 +2,39 @@ import os
 import requests
 import logging
 from typing import Dict, Any
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
-from requests.exceptions import RequestException
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
+from requests.exceptions import RequestException, HTTPError
 
 logger = logging.getLogger(__name__)
 
 # Global Configurations
 USER_AGENT = "AwaasAI/1.0 (Research Pipeline)"
-DEFAULT_TIMEOUT = 10
+DEFAULT_TIMEOUT = 5  # Aggressive timeout constraint (reduced from 10)
 COMMON_HEADERS = {"User-Agent": USER_AGENT}
 
-# Retry Strategy: 3 attempts, exponential backoff (2s, 4s, 8s)
+def is_retryable(exception: BaseException) -> bool:
+    """
+    Intelligent retry evaluator. 
+    Never retry 4xx Client Errors (e.g., unauthorized, bad request).
+    Only retry on network errors or 5xx Server Errors.
+    """
+    if isinstance(exception, HTTPError) and exception.response is not None:
+        if 400 <= exception.response.status_code < 500:
+            return False
+    return isinstance(exception, RequestException)
+
+# Retry Strategy: 2 attempts max, aggressive backoff, intelligent abort
 def resilient_request() -> retry:
     return retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=retry_if_exception_type(RequestException),
+        stop=stop_after_attempt(2),
+        wait=wait_exponential(multiplier=1, min=1, max=3),
+        retry=retry_if_exception(is_retryable),
         reraise=True
     )
 
 @resilient_request()
 def fetch_census_demographics(ward_id: str, pincode: str) -> Dict[str, Any]:
     """Fetches demographic data from Indian Data Project API (or equivalent open census data)."""
-    # Note: Replace with exact production endpoint URL. Using structured placeholder for architecture.
     base_url = "https://api.data.gov.in/resource/census_endpoint"
     api_key = os.getenv("OGD_API_KEY", "")
     params = {
@@ -33,7 +43,6 @@ def fetch_census_demographics(ward_id: str, pincode: str) -> Dict[str, Any]:
         "filters[pincode]": pincode
     }
     
-    # Executing the live request
     response = requests.get(base_url, headers=COMMON_HEADERS, params=params, timeout=DEFAULT_TIMEOUT)
     response.raise_for_status()
     

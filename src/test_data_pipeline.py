@@ -2,6 +2,16 @@ import asyncio
 import time
 import json
 import logging
+import sys
+import os
+
+# First Principles Fix: Dynamically inject project root into sys.path
+# This guarantees absolute imports work regardless of the execution context.
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.abspath(os.path.join(current_dir, '..'))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
 from src.utils.geocoding import resolve_location
 from src.data_connectors.aggregator import aggregate_neighborhood_data
 

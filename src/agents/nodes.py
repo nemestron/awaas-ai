@@ -57,9 +57,14 @@ class RecommendationResult(BaseModel):
 def validate_node(state: AgentState) -> AgentState:
     logger.info("Executing Validation Node...")
     raw_data = state.rawdata
+    
+    # First Principles Fix: Safely handle NoneType data payloads
+    amenities_data = raw_data.get("amenities", {}).get("data")
+    safe_amenities = amenities_data if amenities_data is not None else []
+    
     data_presence = {
         "demographics": raw_data.get("demographics", {}).get("error") is None,
-        "amenities": len(raw_data.get("amenities", {}).get("data", [])) > 0,
+        "amenities": len(safe_amenities) > 0,
         "risks": raw_data.get("risks", {}).get("crime", {}).get("error") is None
     }
     
@@ -78,29 +83,33 @@ def synthesize_node(state: AgentState) -> AgentState:
     logger.info("Executing Tool-Augmented Synthesis Node...")
     user_type = state.usercriteria.get("investment_type", "general buyer") if state.usercriteria else "general buyer"
     
-    # 1. First Principles Fix: Summarize or truncate payloads to strictly respect 12k TPM limits
     @tool
     def get_census() -> str:
         """Use this tool to get demographic and census data for the neighborhood."""
-        return json.dumps(state.rawdata.get("demographics", {}))[:1000]
+        data = state.rawdata.get("demographics", {})
+        safe_data = data if data is not None else {}
+        return json.dumps(safe_data)[:1000]
         
     @tool
     def get_amenities() -> str:
         """Use this tool to get local amenities like schools and hospitals."""
-        amenities_list = state.rawdata.get("amenities", {}).get("data", [])
+        amenities_data = state.rawdata.get("amenities", {}).get("data")
+        safe_amenities = amenities_data if amenities_data is not None else []
         
-        # Generate a dense summary mapping to save tokens
         counts = {}
-        for item in amenities_list:
-            atype = item.get("tags", {}).get("amenity", "unknown")
-            counts[atype] = counts.get(atype, 0) + 1
+        for item in safe_amenities:
+            if isinstance(item, dict):
+                atype = item.get("tags", {}).get("amenity", "unknown")
+                counts[atype] = counts.get(atype, 0) + 1
             
         return f"Amenities count within 2km: {json.dumps(counts)}"
         
     @tool
     def check_flood_zone() -> str:
         """Use this tool to check the flood risk and zone status."""
-        return json.dumps(state.rawdata.get("risks", {}).get("flood_zone", {}))[:500]
+        data = state.rawdata.get("risks", {}).get("flood_zone", {})
+        safe_data = data if data is not None else {}
+        return json.dumps(safe_data)[:500]
 
     tools = [get_census, get_amenities, check_flood_zone]
     tool_map = {t.name: t for t in tools}
@@ -136,11 +145,13 @@ def assess_risk_node(state: AgentState) -> AgentState:
     logger.info("Executing Risk Assessment Node...")
     user_type = state.usercriteria.get("investment_type", "general buyer") if state.usercriteria else "general buyer"
     
-    # Truncate risk payload
+    risk_data = state.rawdata.get('risks', {})
+    safe_risk_data = risk_data if risk_data is not None else {}
+    
     prompt = f"""
     Analyze the following risk data (Flood, AQI, Crime).
     Extract and prioritize the top 3 specific concerns for a {user_type}. Explain why each matters briefly.
-    DATA: {json.dumps(state.rawdata.get('risks', {}))[:1500]}
+    DATA: {json.dumps(safe_risk_data)[:1500]}
     """
     
     try:

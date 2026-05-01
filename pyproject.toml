@@ -17,6 +17,5 @@ dependencies = [
     "reportlab>=4.5.0",
     "requests>=2.33.1",
     "streamlit>=1.57.0",
-    "supabase>=2.29.0",
     "tenacity>=9.1.4",
 ]

@@ -11,7 +11,6 @@ from src.state import AgentState
 
 logger = logging.getLogger(__name__)
 
-# Use the fastest, most reliable models for pure text generation
 VALIDATION_MODEL = "llama-3.1-8b-instant"
 SYNTHESIS_MODEL = "llama-3.3-70b-versatile"
 RISK_MODEL = "llama-3.3-70b-versatile"
@@ -39,7 +38,7 @@ class ValidationResult(BaseModel):
     missing_fields: List[str] = Field(description="List of critical data categories missing.")
 
 class RiskResult(BaseModel):
-    top_risks: List[str] = Field(description="Top 3 prioritized risk concerns.")
+    top_risks: List[str] = Field(description="Top 3 prioritized risk concerns, written as full descriptive sentences.")
 
 class RecommendationResult(BaseModel):
     suitability_score: int = Field(description="Calculated dynamic score from 1 to 10.")
@@ -101,7 +100,7 @@ def synthesize_node(state: AgentState) -> AgentState:
     
     amenity_str = f"{hospitals} Hospitals/Clinics, {schools} Schools/Colleges, {restaurants} Restaurants, {cafes} Cafes/Pubs, {banks} Banks/ATMs, {worship} Places of Worship, and {malls} Malls/Shopping Centers."
 
-    # First Principles Fix: Pre-inject the exact numbers into the prompt.
+    # First Principles Fix: Enforce numerical formatting rules
     prompt = f"""
     You are an elite Real Estate Analyst. Write a 4-sentence neighborhood overview for PIN {state.pincode}.
     
@@ -112,19 +111,19 @@ def synthesize_node(state: AgentState) -> AgentState:
     
     INSTRUCTIONS:
     Write a dense, professional paragraph summarizing this location. 
-    You MUST explicitly write out the numbers for Hospitals, Schools, Restaurants, Cafes, Banks, Worship Places, and Malls.
+    You MUST explicitly list the counts for Hospitals, Schools, Restaurants, Cafes, Banks, Worship Places, and Malls.
+    CRITICAL RULE: You MUST use numerical digits (e.g., '22', '5', '16') for all counts. You are FORBIDDEN from spelling out numbers as words (e.g., do not write 'twenty-two', 'five', 'sixteen').
     Do NOT use vague language like "various amenities".
     """
     
     try:
         llm = get_llm(SYNTHESIS_MODEL)
         messages = [
-            SystemMessage(content="You are a strict data synthesizer. You never invent numbers. You always include the exact counts provided to you."),
+            SystemMessage(content="You are a strict data synthesizer. You never invent numbers. You always use numerical digits (1, 2, 15) instead of words (one, two, fifteen)."),
             HumanMessage(content=prompt)
         ]
         response = llm.invoke(messages)
         
-        # Clean up any residual reasoning tags from certain models
         clean_text = re.sub(r'<think>.*?</think>', '', response.content, flags=re.DOTALL).strip()
         state.aisummary = clean_text
         
@@ -136,7 +135,14 @@ def synthesize_node(state: AgentState) -> AgentState:
 
 def assess_risk_node(state: AgentState) -> AgentState:
     logger.info("Executing Risk Assessment Node...")
-    prompt = f"Analyze this risk data: {json.dumps(state.rawdata.get('risks', {}))[:1000]}. Extract top 3 concerns."
+    # First Principles Fix: Force descriptive sentence generation instead of raw key extraction
+    prompt = f"""
+    Analyze this risk data: {json.dumps(state.rawdata.get('risks', {}))[:1000]}. 
+    Extract the top 3 risk concerns. 
+    CRITICAL RULE: For each risk, you MUST write a full, descriptive sentence explaining the concern and its potential impact. 
+    You are FORBIDDEN from outputting raw JSON keys like 'air_quality' or 'flood_zone'.
+    Example of correct output: 'The severe AQI of 338 poses a significant long-term respiratory hazard to residents.'
+    """
     try:
         result: RiskResult = invoke_with_fallback(RISK_MODEL, prompt, RiskResult)
         state.riskflags.extend(result.top_risks)

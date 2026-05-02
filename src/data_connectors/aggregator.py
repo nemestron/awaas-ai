@@ -92,12 +92,15 @@ async def aggregate_neighborhood_data(location: dict) -> dict:
     logger.info("Initiating concrete data fetch...")
     
     api_key = os.getenv("INDIAN_DATA_API_KEY", "")
-    district = location.get("district", "Mumbai Suburban")
-    # Dynamically extract the PIN being searched, default to 400050 if missing
-    pin = location.get("pincode", "400050") 
-    lat = location.get("lat", "19.0596")
-    lon = location.get("lon", "72.8295")
+    district = location.get("district", "Unknown District")
+    pin = location.get("pincode", "400050")
+    lat = location.get("lat", "")
+    lon = location.get("lon", "")
     
+    # First Principles Fix: Guarantee valid coordinates so the query never crashes
+    if not lat or not lon:
+        lat, lon = "19.0596", "72.8295"
+
     osm_url = "https://overpass-api.de/api/interpreter"
     osm_query = f"[out:json][timeout:15];node[\"amenity\"](around:2000,{lat},{lon});out;"
     
@@ -109,15 +112,22 @@ async def aggregate_neighborhood_data(location: dict) -> dict:
         
         osm_result, demo_result, crime_result = await asyncio.gather(osm_task, demo_task, crime_task)
 
-    # Apply Gov API Fallbacks
     fallback_gov = get_concrete_fallback_data(district, pin)
-    final_demographics = demo_result["data"] if demo_result.get("data") else fallback_gov["demographics"]
-    final_crime = crime_result["data"] if crime_result.get("data") else fallback_gov["crime"]
     
-    # First Principles Fix: Intercept empty OSM responses caused by Cloud IP Blocking
+    # First Principles Fix: Aggressively reject false-positive API payloads
+    def is_valid_gov(res):
+        d = res.get("data")
+        if not d or not isinstance(d, dict): return False
+        # If the API returns a success code but the JSON contains error keys, reject it.
+        if "message" in d or "error" in d or "desc" in d and "not found" in str(d.get("desc")).lower(): return False
+        return True
+
+    final_demographics = demo_result["data"] if is_valid_gov(demo_result) else fallback_gov["demographics"]
+    final_crime = crime_result["data"] if is_valid_gov(crime_result) else fallback_gov["crime"]
+    
     osm_data = osm_result.get("data", {})
     if not osm_data or not isinstance(osm_data, dict) or not osm_data.get("elements"):
-        logger.warning(f"OSM API blocked or returned empty for PIN {pin}. Deploying deterministic amenity fallback.")
+        logger.warning(f"OSM API blocked or invalid. Deploying deterministic amenity fallback for {pin}.")
         osm_result["data"] = get_concrete_fallback_amenities(pin)
     
     logger.info("Data aggregation complete.")

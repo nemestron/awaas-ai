@@ -75,9 +75,9 @@ Awaas AI provides:
 ## 🏗️ Architecture
 
  
+<img width="1536" height="1024" alt="Awaas AI Architecture Diagram" src="https://github.com/user-attachments/assets/3407c2a9-0a4a-446f-9ba1-f784b8b5c61f" />
 
 
-![Awaas AI Architecture Diagram](./architecture_diagram.png)
 
 *Figure 1: Complete system architecture showing data flow from Indian open-data sources through AI agent orchestration to user-facing Streamlit dashboard*
 

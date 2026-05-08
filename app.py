@@ -4,25 +4,22 @@ import os
 import sys
 from dotenv import load_dotenv
 
-# First Principles Fix: Load environment variables into the Streamlit context
 load_dotenv()
 
-# Ensure absolute imports resolve correctly for the Streamlit environment
 current_dir = os.path.dirname(os.path.abspath(__file__))
 if current_dir not in sys.path:
     sys.path.insert(0, current_dir)
 
 from src.graph_engine import run_awaas_analysis
 
-# --- UI Configuration ---
+# Removed emoji from page_icon to adhere strictly to production standards
 st.set_page_config(
     page_title="Awaas AI | Neighborhood Intelligence",
-    page_icon="🏢",
     layout="centered",
     initial_sidebar_state="collapsed"
 )
 
-# Custom CSS for high-fidelity palette (Warm Ivory, Deep Charcoal, Luxe Antique Gold)
+# Custom CSS for high-fidelity palette and social icon hover effects
 st.markdown("""
     <style>
     .stApp {
@@ -33,8 +30,6 @@ st.markdown("""
         color: #2C3034 !important;
         font-family: 'Helvetica Neue', sans-serif;
     }
-    
-    /* Button Styling */
     .stButton>button {
         background-color: #D4AF37;
         color: #2C3034;
@@ -49,8 +44,6 @@ st.markdown("""
         border-color: transparent !important;
         box-shadow: 0 4px 8px rgba(0,0,0,0.1);
     }
-    
-    /* Input Field Fix: Force Contrast and override focus outlines */
     .stTextInput>div>div>input {
         background-color: #FAF9F6 !important;
         color: #2C3034 !important;
@@ -59,19 +52,47 @@ st.markdown("""
     .stTextInput>div>div>input:focus {
         box-shadow: 0 0 0 2px rgba(212, 175, 55, 0.5) !important;
     }
-    
-    /* Alert Styling */
     .stAlert {
         background-color: rgba(212, 175, 55, 0.1);
         border-color: #D4AF37;
         color: #2C3034;
     }
+    .social-icon {
+        transition: transform 0.2s ease;
+        margin-left: 15px;
+    }
+    .social-icon:hover {
+        transform: scale(1.1);
+    }
     </style>
     """, unsafe_allow_html=True)
 
-# --- Application Header ---
-st.title("Awaas AI")
-st.markdown("### Neighborhood Intelligence for Indian Real Estate")
+# --- Header Section with 3-Column Layout ---
+header_col1, header_col2, header_col3 = st.columns([1.5, 3, 1])
+
+with header_col1:
+    # Use relative pathing so the image loads correctly on Streamlit Cloud
+    img_path = os.path.join(current_dir, "assets", "Comic D.png")
+    if os.path.exists(img_path):
+        st.image(img_path, use_container_width=True)
+
+with header_col2:
+    st.title("Awaas AI")
+    st.markdown("### Neighborhood Intelligence for Indian Real Estate")
+
+with header_col3:
+    # Inject HTML for authentic SVG logos with target="_blank" to open in new tabs
+    st.markdown("""
+    <div style='display: flex; justify-content: flex-end; align-items: center; height: 100%; padding-top: 30px;'>
+        <a href='https://github.com/nemestron/awaas-ai' target='_blank' class='social-icon'>
+            <img src='https://cdn.jsdelivr.net/gh/devicons/devicon/icons/github/github-original.svg' width='35'/>
+        </a>
+        <a href='https://www.linkedin.com/in/dhiraj-malwade-6a8385399/' target='_blank' class='social-icon'>
+            <img src='https://cdn.jsdelivr.net/gh/devicons/devicon/icons/linkedin/linkedin-original.svg' width='35'/>
+        </a>
+    </div>
+    """, unsafe_allow_html=True)
+
 st.markdown("Research any Indian neighborhood in 15 seconds using verified open data + AI synthesis.")
 st.markdown("---")
 
